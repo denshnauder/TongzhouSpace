@@ -1,77 +1,135 @@
 import os
 import shutil
-import stat
-from datetime import datetime
+import subprocess
+import logging
+from pathlib import Path
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-CONTENT_DIR = os.path.join(PROJECT_ROOT, "content")
-TEMP_DIR = os.path.join(PROJECT_ROOT, ".temp_cache")
-CONTACT_EMAIL = "denshnauder@gmail.com"
+# ================= 配置区域 =================
 
-# 强力删除只读文件的回调函数
-def remove_readonly(func, path, _):
-    os.chmod(path, stat.S_IWRITE)
-    func(path)
+# 1. 临时缓存目录 (运行结束后会自动删除)
+TEMP_DIR = Path(".temp_cache_runtime")
 
-RESOURCES = [
+# 2. 最终目标根目录
+CONTENT_ROOT = Path("content")
+
+# 3. 仓库映射配置
+# 格式: {
+#   "git_url": "仓库地址",
+#   "target_path": "你在 content 里的分类路径 (例如: 课程名/子分类)",
+#   "repo_name": "临时文件夹名 (随便起，用于git clone)"
+# }
+REPO_CONFIGS = [
     {
-        "name": "signals-student",
-        "url": "https://github.com/liyuxuan3003/SignalsAndSystems.git",
-        "sub_path": "signals-and-systems/notes/student-notes",
-        "title": "学长实战笔记"
-    },
-    {
-        "name": "signals-zju",
+        # 浙大信号与系统 -> 归档到同济课程文件夹下的"外校参考"中
         "url": "https://github.com/VipaiLab/Signals-and-Systems-course.git",
-        "sub_path": "signals-and-systems/zju-materials",
-        "title": "浙大官方名校课件"
-    }
+        "repo_name": "zju_signals_temp",
+        "target_path": "信号与系统/外校存档/浙大VipaiLab_课程资料" 
+    },
+    # 你可以在这里添加更多仓库，例如:
+    # {
+    #     "url": "https://github.com/...",
+    #     "repo_name": "mit_linear_algebra",
+    #     "target_path": "线性代数/MIT_1806"
+    # }
 ]
 
-def generate_index_content(title, files):
-    now = datetime.now().strftime("%Y-%m-%d")
-    content = f"---\ntitle: {title}\nlast_updated: {now}\n---\n\n# {title}\n\n"
-    content += f"> [!ABSTRACT] 资源说明\n> 本目录由脚本于 {now} 自动同步。如有侵权，请联系 **{CONTACT_EMAIL}**。\n\n"
-    content += "## 📂 文件列表\n"
-    for f in sorted(files):
-        icon = "📄" if f.lower().endswith('.pdf') else "📝"
-        content += f"- [[{f}|{icon} {f}]]\n"
-    return content
+# 4. 允许同步的文件后缀 (保留 PDF, PPT, Matlab, 代码)
+ALLOWED_EXTENSIONS = {
+    # 核心文档
+    '.pdf', '.docx', '.pptx', '.doc', '.ppt', 
+    '.md', '.markdown', '.txt',
+    # 编程与数据
+    '.m', '.mat',      # Matlab/Simulink
+    '.py', '.ipynb',   # Python
+    '.c', '.cpp', '.h',# C/C++
+    # 图片资源
+    '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'
+}
 
-def sync_and_index():
-    # 彻底清理旧缓存
-    if os.path.exists(TEMP_DIR):
-        shutil.rmtree(TEMP_DIR, onerror=remove_readonly) # 使用修复函数
-    os.makedirs(TEMP_DIR)
+# 5. 排除的垃圾目录
+EXCLUDE_DIRS = {'.git', '.github', '.obsidian', '__pycache__', '.idea', '.vscode', 'node_modules'}
+
+# ===========================================
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+
+def run_command(cmd, cwd=None):
+    """执行 Shell 命令"""
+    try:
+        subprocess.run(cmd, check=True, cwd=cwd, shell=True)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"命令执行失败: {cmd}")
+        raise e
+
+def clone_repos():
+    """将所有仓库 Clone 到临时目录"""
+    if TEMP_DIR.exists():
+        shutil.rmtree(TEMP_DIR)
+    TEMP_DIR.mkdir(parents=True)
+
+    for config in REPO_CONFIGS:
+        url = config['url']
+        name = config['repo_name']
+        logging.info(f"⬇️  正在下载: {name} ...")
+        
+        # 为了加快速度，可以使用 --depth 1 (浅克隆，不下载历史记录)
+        run_command(f"git clone --depth 1 {url} {name}", cwd=TEMP_DIR)
+
+def sync_files():
+    """执行文件筛选与移动"""
+    logging.info("🔄 开始处理并归档文件...")
     
-    for res in RESOURCES:
-        repo_path = os.path.join(TEMP_DIR, res['name'])
-        target_path = os.path.join(CONTENT_DIR, res['sub_path'])
+    sync_count = 0
+    
+    for config in REPO_CONFIGS:
+        repo_name = config['repo_name']
+        # 组合完整的目标路径: content/课程名/子文件夹
+        target_dir = CONTENT_ROOT / config['target_path']
+        source_dir = TEMP_DIR / repo_name
         
-        print(f"正在克隆: {res['name']}...")
-        os.system(f"git clone --depth 1 {res['url']} {repo_path}")
+        if not source_dir.exists():
+            logging.warning(f"⚠️ 源目录不存在，跳过: {repo_name}")
+            continue
 
-        if os.path.exists(target_path):
-            shutil.rmtree(target_path, onerror=remove_readonly)
-        os.makedirs(target_path)
-        
-        synced_files = []
-        for root, _, filenames in os.walk(repo_path):
-            if '.git' in root: continue
-            for f in filenames:
-                # 增强匹配：包含所有常见文档格式
-                if f.lower().endswith(('.md', '.pdf', '.jpg', '.png', '.jpeg')):
-                    shutil.copy(os.path.join(root, f), target_path)
-                    if f.lower() != 'readme.md':
-                        synced_files.append(f)
-        
-        index_file = os.path.join(target_path, "index.md")
-        with open(index_file, "w", encoding="utf-8") as f:
-            f.write(generate_index_content(res['title'], synced_files))
-        print(f"成功同步 {len(synced_files)} 个文件。")
+        # 遍历临时目录下的仓库
+        for root, dirs, files in os.walk(source_dir):
+            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+            
+            for file in files:
+                file_path = Path(root) / file
+                suffix = file_path.suffix.lower()
 
-    shutil.rmtree(TEMP_DIR, onerror=remove_readonly)
-    print("\n[OK] 同步完成，权限问题已解决。")
+                if suffix in ALLOWED_EXTENSIONS:
+                    # 计算相对路径
+                    rel_path = file_path.relative_to(source_dir)
+                    final_dest = target_dir / rel_path
+                    
+                    # 确保目标父文件夹存在
+                    final_dest.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # 复制逻辑 (覆盖更新)
+                    # 如果需要保留用户在 content 里修改过的文件，可以加时间戳判断
+                    # 这里默认强制覆盖，保证和仓库一致
+                    shutil.copy2(file_path, final_dest)
+                    sync_count += 1
+    
+    logging.info(f"✅ 同步完成！共归档 {sync_count} 个文件。")
+
+def clean_up():
+    """清理临时文件夹"""
+    if TEMP_DIR.exists():
+        logging.info("🧹 正在清理临时文件...")
+        # 强制删除临时目录及其内容
+        # ignore_errors=True 防止因为文件占用导致的报错
+        shutil.rmtree(TEMP_DIR, ignore_errors=True)
+        logging.info("✨ 清理完毕。")
 
 if __name__ == "__main__":
-    sync_and_index()
+    try:
+        clone_repos()
+        sync_files()
+    except Exception as e:
+        logging.error(f"❌ 发生错误: {e}")
+    finally:
+        # 无论成功还是失败，只要 temp 文件夹还在，就删掉它
+        clean_up()
