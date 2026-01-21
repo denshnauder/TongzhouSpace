@@ -1,44 +1,77 @@
 import os
 import shutil
+import stat
+from datetime import datetime
 
-# 配置你要抓取的资源仓库
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+CONTENT_DIR = os.path.join(PROJECT_ROOT, "content")
+TEMP_DIR = os.path.join(PROJECT_ROOT, ".temp_cache")
+CONTACT_EMAIL = "denshnauder@gmail.com"
+
+# 强力删除只读文件的回调函数
+def remove_readonly(func, path, _):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
 RESOURCES = [
     {
-        "name": "signals-notes-student",
+        "name": "signals-student",
         "url": "https://github.com/liyuxuan3003/SignalsAndSystems.git",
-        "target_dir": "content/signals-and-systems/notes/student-notes"
+        "sub_path": "signals-and-systems/notes/student-notes",
+        "title": "学长实战笔记"
     },
     {
-        "name": "signals-zju-official",
+        "name": "signals-zju",
         "url": "https://github.com/VipaiLab/Signals-and-Systems-course.git",
-        "target_dir": "content/signals-and-systems/zju-materials"
+        "sub_path": "signals-and-systems/zju-materials",
+        "title": "浙大官方名校课件"
     }
 ]
 
-def sync():
+def generate_index_content(title, files):
+    now = datetime.now().strftime("%Y-%m-%d")
+    content = f"---\ntitle: {title}\nlast_updated: {now}\n---\n\n# {title}\n\n"
+    content += f"> [!ABSTRACT] 资源说明\n> 本目录由脚本于 {now} 自动同步。如有侵权，请联系 **{CONTACT_EMAIL}**。\n\n"
+    content += "## 📂 文件列表\n"
+    for f in sorted(files):
+        icon = "📄" if f.lower().endswith('.pdf') else "📝"
+        content += f"- [[{f}|{icon} {f}]]\n"
+    return content
+
+def sync_and_index():
+    # 彻底清理旧缓存
+    if os.path.exists(TEMP_DIR):
+        shutil.rmtree(TEMP_DIR, onerror=remove_readonly) # 使用修复函数
+    os.makedirs(TEMP_DIR)
+    
     for res in RESOURCES:
-        temp_dir = f"temp_{res['name']}"
+        repo_path = os.path.join(TEMP_DIR, res['name'])
+        target_path = os.path.join(CONTENT_DIR, res['sub_path'])
         
-        # 1. 抓取仓库 (或者更新)
-        if os.path.exists(temp_dir):
-            print(f"Updating {res['name']}...")
-            os.system(f"cd {temp_dir} && git pull")
-        else:
-            print(f"Cloning {res['name']}...")
-            os.system(f"git clone {res['url']} {temp_dir}")
+        print(f"正在克隆: {res['name']}...")
+        os.system(f"git clone --depth 1 {res['url']} {repo_path}")
 
-        # 2. 自动创建目标文件夹
-        os.makedirs(res['target_dir'], exist_ok=True)
-
-        # 3. 筛选并搬运 (只拿 PDF 和 Markdown)
-        for root, dirs, files in os.walk(temp_dir):
-            for file in files:
-                if file.endswith(('.md', '.pdf', '.jpg', '.png')):
-                    src_path = os.path.join(root, file)
-                    # 保持原有的层级结构或直接扁平化处理
-                    shutil.copy(src_path, res['target_dir'])
+        if os.path.exists(target_path):
+            shutil.rmtree(target_path, onerror=remove_readonly)
+        os.makedirs(target_path)
         
-        print(f"Successfully synced {res['name']} to {res['target_dir']}")
+        synced_files = []
+        for root, _, filenames in os.walk(repo_path):
+            if '.git' in root: continue
+            for f in filenames:
+                # 增强匹配：包含所有常见文档格式
+                if f.lower().endswith(('.md', '.pdf', '.jpg', '.png', '.jpeg')):
+                    shutil.copy(os.path.join(root, f), target_path)
+                    if f.lower() != 'readme.md':
+                        synced_files.append(f)
+        
+        index_file = os.path.join(target_path, "index.md")
+        with open(index_file, "w", encoding="utf-8") as f:
+            f.write(generate_index_content(res['title'], synced_files))
+        print(f"成功同步 {len(synced_files)} 个文件。")
+
+    shutil.rmtree(TEMP_DIR, onerror=remove_readonly)
+    print("\n[OK] 同步完成，权限问题已解决。")
 
 if __name__ == "__main__":
-    sync()
+    sync_and_index()
