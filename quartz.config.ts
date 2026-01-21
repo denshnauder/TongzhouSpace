@@ -8,7 +8,7 @@ import * as Plugin from "./quartz/plugins"
  */
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "Quartz 4",
+    pageTitle: "同舟空间",
     pageTitleSuffix: "",
     enableSPA: true,
     enablePopovers: true,
@@ -34,9 +34,9 @@ const config: QuartzConfig = {
           gray: "#b8b8b8",
           darkgray: "#4e4e4e",
           dark: "#2b2b2b",
-          secondary: "#284b63",
-          tertiary: "#84a59d",
-          highlight: "rgba(143, 159, 169, 0.15)",
+          secondary: "#005bac",    // 核心：同济蓝，用于标题和链接
+          tertiary: "#66a3ff",     // 辅助蓝，用于鼠标悬停效果
+          highlight: "rgba(0, 91, 172, 0.1)", // 链接点击时的背景色
           textHighlight: "#fff23688",
         },
         darkMode: {
@@ -45,9 +45,9 @@ const config: QuartzConfig = {
           gray: "#646464",
           darkgray: "#d4d4d4",
           dark: "#ebebec",
-          secondary: "#7b97aa",
-          tertiary: "#84a59d",
-          highlight: "rgba(143, 159, 169, 0.15)",
+          secondary: "#7fbfff",    // 亮蓝色，确保在深色背景下的可读性
+          tertiary: "#4d94ff",     // 对应的强调蓝
+          highlight: "rgba(127, 191, 255, 0.15)",
           textHighlight: "#b3aa0288",
         },
       },
