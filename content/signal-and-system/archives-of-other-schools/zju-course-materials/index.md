@@ -1,6 +1,5 @@
 ---
-title: 信号与系统
-slug: signal-and-systems
+title: 浙大VipaiLab_课程资料
 ---
 
 # 信号与系统课程资料
