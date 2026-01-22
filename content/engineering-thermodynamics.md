@@ -5,6 +5,7 @@ tags:
   - 专业课
   - 资料下载
   - 同济大学
+slug: engineering-thermodynamics
 ---
 
 # 课程简介
