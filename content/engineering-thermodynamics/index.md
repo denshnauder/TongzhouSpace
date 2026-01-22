@@ -3,8 +3,7 @@ title: 工程热力学
 date: 2026-01-22
 tags:
   - 专业课
-  - 资料下载
-  - 同济大学
+  - 车辆工程（汽车）
 slug: engineering-thermodynamics
 ---
 
