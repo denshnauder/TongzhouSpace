@@ -1,3 +1,21 @@
 @use "./base.scss";
 
 // put your custom CSS here!
+
+// 优化正文字体排版
+body {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+// 让左侧导航的标题（那个“导航”）更有质感
+.explorer > button#explorer {
+  color: var(--secondary);
+  font-family: var(--headerFont);
+  letter-spacing: 0.1rem;
+}
+
+// 隐藏“1 item under this folder” (如果你还没改掉它)
+.page-listing > p {
+  display: none;
+}
