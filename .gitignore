@@ -10,3 +10,7 @@ private/
 .replit
 replit.nix
 .env
+.temp_cache_runtime/
+temp_git_workdir/
+node_modules/
+.quartz-cache/
