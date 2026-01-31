@@ -1,3 +1,13 @@
+"""
+【工具名称】：setup_course.py (新课程标准目录创建工具)
+【使用方法】：修改文件底部的 create_course("课程名") 里的名字，运行 python setup_course.py
+【功能说明】：
+    - 自动创建 notes/exams/homework/attachments 四大标准子目录。
+    - 自动生成包含预设链接（笔记、历年卷）的课程主页 index.md。
+【注意事项】：
+    - 课程名建议写中文，脚本会自动生成对应的全英文文件夹路径。
+"""
+
 import os
 
 def create_course(course_name):

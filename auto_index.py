@@ -1,3 +1,14 @@
+"""
+【工具名称】：auto_index.py (缺失索引自动补全工具)
+【使用方法】：直接运行 python auto_index.py
+【功能说明】：
+    - 递归扫描 content 目录下的所有子文件夹。
+    - 发现没有 index.md 的文件夹时，自动创建一个基础的 index.md 文件。
+    - 确保侧边栏和文件夹页面可以正常点击访问。
+【注意事项】：
+    - 生成的内容仅为占位标题，后续建议手动修改 index.md 增加详细描述。
+"""
+
 import os
 
 CONTENT_DIR = "content"

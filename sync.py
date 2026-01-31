@@ -1,3 +1,17 @@
+"""
+【工具名称】：sync.py (外部资源自动同步工具)
+【使用方法】：
+    1. 在 REPO_CONFIGS 中添加外部仓库 URL 和目标存放路径。
+    2. 运行：python sync.py
+【功能说明】：
+    - 自动克隆外部仓库到临时目录。
+    - 强制清洗文件名（全小写、去空格、去特殊字符）以符合 Quartz 规范。
+    - 自动生成符合 Quartz 样式的目录索引 index.md。
+【注意事项】：
+    - 运行前请确保本地已安装 Git。
+    - 会自动覆盖 target_path 下的同名文件，请勿在该目录下手动修改重要笔记。
+"""
+
 import os
 import shutil
 import subprocess
@@ -6,6 +20,7 @@ import stat
 import re  # 导入正则表达式库
 from pathlib import Path
 
+# 每次使用只需要修改配置区域
 # ================= 配置区域 =================
 
 TEMP_DIR = Path(".temp_cache_runtime")
