@@ -105,21 +105,22 @@ def sync_files():
     
     for config in REPO_CONFIGS:
         repo_name = config['repo_name']
-        # 注意：target_dir 保持配置中的中文名（如果你想保留中文路径）
+        # 这里的 target_dir 现在是 signal-and-system/archives/zju-vipailab
         target_dir = CONTENT_ROOT / config['target_path']
         source_dir = TEMP_DIR / repo_name
         
         if not source_dir.exists(): continue
 
         for root, dirs, files in os.walk(source_dir):
+            # 排除掉不需要的文件夹
             dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+            
             for file in files:
                 file_path = Path(root) / file
                 if file_path.suffix.lower() in ALLOWED_EXTENSIONS:
-                    # 计算相对路径
+                    # 关键：彻底清洗每一级路径
                     rel_path = file_path.relative_to(source_dir)
-                    
-                    # 【关键点】对路径中的每一级文件夹和文件名进行“清洗”
+                    # 对每一层文件夹名、文件名都调用 sanitize_name
                     sanitized_parts = [sanitize_name(part) for part in rel_path.parts]
                     final_rel_path = Path(*sanitized_parts)
                     
@@ -129,14 +130,12 @@ def sync_files():
                     shutil.copy2(file_path, final_dest)
                     sync_count += 1
         
-        # 重新扫描目标目录生成索引
+        # 处理索引
         for root, dirs, files in os.walk(target_dir):
             current_path = Path(root)
-            # 标题可以保留中文，方便阅读
-            folder_title = current_path.name
+            # 这里的标题我们稍微温柔点，把短横线换成空格，首字母大写，好看一点
+            folder_title = current_path.name.replace("-", " ").title()
             generate_index_md(current_path, folder_title)
-
-    logging.info(f"✅ 同步完成！共归档 {sync_count} 个文件。")
 
 def clean_up():
     if TEMP_DIR.exists():
