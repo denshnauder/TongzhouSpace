@@ -2,7 +2,7 @@ import os
 import stat
 import shutil
 import subprocess
-import sys
+import re  # 导入正则，用来清洗文件名
 from dotenv import load_dotenv
 
 # 1. 加载 Token
@@ -12,90 +12,73 @@ ACCESS_TOKEN = os.getenv("MODELSCOPE_TOKEN")
 # 2. 配置信息
 USERNAME = "DenShnauder" 
 REPO_NAME = "Tongji-Res-Archive" 
-LOCAL_FILE_PATH = r"G:\工程热力学.zip"  # 本地文件或文件夹路径
+LOCAL_FILE_PATH = r"G:\工程热力学.zip"  # 你要上传的文件路径
 WORK_DIR = "./temp_git_workdir"
 
-# 👇 【新增】专门处理Windows只读文件删除的回调函数
+def sanitize_name(name):
+    """清洗文件名：转小写、去空格、去特殊字符，确保 URL 不会断掉"""
+    name = name.lower()
+    name = re.sub(r'[\s_]+', '-', name)
+    name = re.sub(r'[^\u4e00-\u9fa5a-z0-9\-.]', '', name)
+    return name
+
 def remove_readonly(func, path, excinfo):
-    # 修改文件权限为“可写”，然后再试一次删除
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
 def force_delete_dir(dir_path):
     if os.path.exists(dir_path):
-        print(f"🧹 正在暴力清理目录: {dir_path}")
-        # onerror 参数就是关键，遇到删不掉的文件，交给 remove_readonly 处理
         shutil.rmtree(dir_path, onerror=remove_readonly)
 
-def run_git_cmd(cmd, cwd=None, stream_output=False):
-    if stream_output:
-        print(f"🔧 [实时执行]: {cmd}")
-        process = subprocess.Popen(
-            cmd, shell=True, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-            text=True, encoding='utf-8', errors='replace'
-        )
-        for line in process.stdout:
-            print(line, end='', flush=True)
-        process.wait()
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, cmd)
-    else:
-        print(f"🔧 [后台执行]: {cmd}")
-        result = subprocess.run(
-            cmd, shell=True, cwd=cwd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding='utf-8'
-        )
+def run_git_cmd(cmd, cwd=None):
+    subprocess.run(cmd, shell=True, cwd=cwd, check=True, capture_output=True)
 
 def upload_via_raw_git():
     if not ACCESS_TOKEN:
-        print("❌ Token没读到！去检查 .env 文件")
+        print("❌ 错误：未在 .env 中找到 MODELSCOPE_TOKEN")
         return
 
+    # 预先清洗文件名
+    original_filename = os.path.basename(LOCAL_FILE_PATH)
+    clean_filename = sanitize_name(original_filename)
+    
     GIT_URL = f"https://oauth2:{ACCESS_TOKEN}@www.modelscope.cn/datasets/{USERNAME}/{REPO_NAME}.git"
 
     try:
-        # 0. LFS 检查
-        try:
-            run_git_cmd("git lfs install", cwd=".")
-        except:
-            pass
-
-        # 1. 【关键修改】清理旧目录（使用强力删除）
         force_delete_dir(WORK_DIR)
+        print(f"📥 正在连接 ModelScope 仓库...")
+        run_git_cmd(f"git clone --depth 1 {GIT_URL} {WORK_DIR}")
 
-        # 2. Clone
-        print("📥 正在克隆仓库...")
-        run_git_cmd(f"git clone --depth 1 {GIT_URL} {WORK_DIR}", stream_output=True)
-
-        # 3. 搬运文件
-        filename = os.path.basename(LOCAL_FILE_PATH)
-        dest_path = os.path.join(WORK_DIR, filename)
-        print(f"📦 正在搬运文件：{filename} ...")
+        dest_path = os.path.join(WORK_DIR, clean_filename)
         
+        # 复制文件
         if os.path.isdir(LOCAL_FILE_PATH):
-            force_delete_dir(dest_path) # 如果目标里已有同名文件夹，先删掉
             shutil.copytree(LOCAL_FILE_PATH, dest_path)
         else:
             shutil.copy(LOCAL_FILE_PATH, dest_path)
 
-        # 4. Push
-        print("☁️  正在准备推送...")
-        run_git_cmd(f"git lfs track \"{filename}\"", cwd=WORK_DIR)
-        run_git_cmd("git add .gitattributes", cwd=WORK_DIR)
+        # Git LFS 和 推送
+        print(f"🚀 正在上传文件: {clean_filename} ...")
+        run_git_cmd(f"git lfs track \"{clean_filename}\"", cwd=WORK_DIR)
         run_git_cmd("git add .", cwd=WORK_DIR)
+        run_git_cmd(f'git commit -m "Upload: {clean_filename}"', cwd=WORK_DIR)
+        run_git_cmd("git push", cwd=WORK_DIR)
+
+        # 【核心改进】自动生成直链
+        # ModelScope 的文件直链格式如下：
+        download_url = f"https://www.modelscope.cn/datasets/{USERNAME}/{REPO_NAME}/resolve/master/{clean_filename}"
         
-        commit_msg = f"Auto-upload resource: {filename}"
-        run_git_cmd(f'git commit -m "{commit_msg}"', cwd=WORK_DIR)
-        
-        print("🚀🚀🚀 开始上传！")
-        run_git_cmd("git push --progress", cwd=WORK_DIR, stream_output=True)
-        print(f"\n✅ 成功！")
+        print("\n" + "="*50)
+        print("✅ 上传成功！")
+        print("📂 文件名:", clean_filename)
+        print("🔗 下载直链:", download_url)
+        print("\n📝 请复制下方 Markdown 代码到你的 Quartz 笔记中：")
+        print(f"> [!DOWNLOAD] 资源下载\n> [{original_filename}]({download_url})")
+        print("="*50)
 
     except Exception as e:
-        print(f"\n❌ 流程终止: {e}")
-        
+        print(f"❌ 流程出错: {e}")
     finally:
-        # 脚本跑完，再次清理现场
         force_delete_dir(WORK_DIR)
 
 if __name__ == "__main__":
